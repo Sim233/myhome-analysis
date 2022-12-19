@@ -1,0 +1,281 @@
+---
+title: "Project "
+output: html_document
+date: '2022-12-14'
+---
+
+## Initialization
+
+```{r}
+library(jiebaR)
+library(jiebaRD)
+library(tidyverse)
+library(dplyr)
+library(wordcloud2)
+library(ggplot2)
+```
+
+## Load Data
+
+```{r}
+data = read.csv("jiayuan.csv")
+colnames(data)
+```
+
+## Test
+```{r}
+seg = worker() 
+result = segment("我是一段文本", seg)
+tagger = worker("tag")
+vector_tag(result, tagger)
+abstractor = worker("simhash", topn=3)
+simhash("江州市长江大桥参加了长江大桥的通车仪式", abstractor)
+distance("hello world! 我觉得这个大桥不太好。", "江州市长江大桥参加了长江大桥的通车仪式", abstractor)
+vector_simhash(c("今天","天气","真的","十分","不错","的","感觉"),abstractor)
+```
+
+## Segmentation
+
+
+```{r}
+seg_line = worker(bylines = TRUE, stop_word = "stop_word.txt", user = "user_dict.txt")
+results_line = segment(data$content,seg_line)
+seg_all = worker(stop_word = "stop_word.txt", user = "user_dict.txt")
+results_all = segment(data$content,seg_all)
+```
+
+## Frequency
+
+```{r}
+freq_all = freq(results_all)
+freq_all = freq_all[order(freq_all$freq, decreasing = TRUE), ]
+wordcloud2(freq_all[1:10000,])
+```
+
+```{r}
+freq_all = freq(results_all)
+freq_all = freq_all[order(freq_all$freq, decreasing = TRUE), ]
+
+```
+
+
+```{r}
+dict = readLines("user_dict.txt")
+freq_all[freq_all$char %in% dict,]
+```
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(ggplot2)
+mydata = read.csv("../preprocess-data/jiayuan.csv")
+times = mydata[,"time"]
+
+
+getYear = function(x) {
+  if (x == "") {
+    return(-1);
+  }
+  as.integer(substr(x,1,4))
+}
+getMonth = function(x) {
+  as.integer(substr(x,6,7))
+}
+getDay = function(x) {
+  as.integer(substr(x,9,10))
+}
+getHour = function(x) {
+  if (x == "") {
+    return(-1);
+  }
+  as.integer(substr(x,12,13))
+}
+getDayIdByYear = function(x) {
+  mds = c(31,28,31,30,31,30,31,31,30,31,30,31)
+  month = getMonth(x); dateID = getDay(x);
+  if (month > 1) {
+    for (i in 1:(month-1)) {
+      dateID = dateID + mds[i]
+    }
+  }
+  return(dateID)
+}
+getDayId = function(x) {
+  mds = c(31,28,31,30,31,30,31,31,30,31,30,31)
+  year = getYear(x); month = getMonth(x); dateID = getDay(x);
+  if (month > 1) {
+    for (i in 1:(month-1)) {
+      dateID = dateID + mds[i]
+    }
+  }
+  dateID = dateID + (year - 2004) * 366
+  return(dateID)
+}
+
+mydata$year = sapply(times, getYear)
+mydata$month = sapply(times, getMonth)
+mydata$day = sapply(times, getDay)
+mydata$hour = sapply(times, getHour)
+mydata$answerHour = sapply(mydata$answerTime, getHour)
+mydata$dateIDByYear = sapply(times, getDayIdByYear)
+mydata$dateID = sapply(times, getDayId)
+dim(mydata)
+
+ggplot(mydata, aes(x=year)) + geom_histogram(binwidth = 1, color="#0000EE", fill="#8888EE") + labs(title = "2004-2022年家园网发帖数量")
+ggsave("figure/years.png")
+
+ggplot(mydata, aes(x=month)) + geom_histogram(binwidth = 1, color="#0000EE", fill="#8888EE") + labs(title = "1-12月家园网发帖数量 (2004-2022)")
+ggsave("figure/months.png")
+
+ggplot(mydata, aes(x=day)) + geom_histogram(binwidth = 1, color="#0000EE", fill="#8888EE") + labs(title = "月中家园网发帖数量 (2004-2022)")
+ggsave("figure/days.png")
+
+ggplot(mydata, aes(x=hour)) + geom_histogram(binwidth = 1, color="#0000EE", fill="#8888EE") + labs(title = "单日家园网发帖数量分布 (2004-2022)")
+ggsave("figure/hour.png")
+```
+
+
+```{r}
+ggplot(mydata, aes(x=answerHour)) + geom_histogram(binwidth = 1, color="#0000EE", fill="#8888EE") + labs(title = "单日家园网回答数量分布 (2004-2022)")
+ggsave("figure/answer_hour.png")
+```
+
+
+```{r}
+ggplot(mydata, aes(x=dateIDByYear)) + geom_density(binwidth = 1, color="#0000EE", fill="#8888EE") + labs(title = "2004-2022 家园网发帖数量按日月分布")
+ggsave("figure/daysByYear-dense.png")
+ggplot(mydata, aes(x=dateID)) + geom_histogram(binwidth = 1, color="#0000EE", fill="#8888EE") + labs(title = "2004-2022 家园网发帖数量分布（按日）")
+ggsave("figure/days_total.png")
+
+print(getDay(times[10000]))
+print(getMonth(times[10000]))
+print(getYear(times[10000]))
+print(getDayId(times[10000]))
+print(getDayIdByYear(times[10000]))
+```
+
+```{r}
+mydata_answered = subset(mydata, answerHour >= 0)
+mydata_notanswered = subset(mydata, answerHour <= 0)
+ggplot(mydata_answered, aes(x=answerHour)) + geom_histogram(binwidth = 1, color="#0000EE", fill="#8888EE") + labs(title = "单日家园网回答数量分布 (2004-2022)")
+ggsave("figure/answer_hour.png")
+
+answerNums = c(); unanswerNums = c(); answerRates = c()
+for (i in 1:24) {
+  ansdf = subset(mydata_answered, hour==i); answerNums = c(answerNums, dim(ansdf)[1])
+  noansdf = subset(mydata_notanswered, hour==i); unanswerNums = c(unanswerNums, dim(noansdf)[1])
+  answerRate = answerNums[i] / (answerNums[i] + unanswerNums[i])
+  answerRates = c(answerRates, answerRate)
+}
+
+answerRateDf = data.frame(answerRate = answerRates, answerNum = answerNums, unanswerNum = unanswerNums, x = 1:24)
+ggplot(answerRateDf, aes(x=x,y=answerRate)) + geom_col(color="#0000EE", fill="#8888EE") + labs(title = "单日家园网回答率分布 (2004-2022)")
+ggsave("figure/answer_RateHour.png")
+
+answerNums = c(); unanswerNums = c(); answerRates = c()
+for (i in 2004:2022) {
+  ansdf = subset(mydata_answered, year==i); aNum = dim(ansdf)[1]; answerNums = c(answerNums, aNum)
+  noansdf = subset(mydata_notanswered, year==i); naNum = dim(noansdf)[1]; unanswerNums = c(unanswerNums, naNum)
+  answerRate = aNum / (aNum + naNum)
+  answerRates = c(answerRates, answerRate)
+}
+
+answerRateYearDf = data.frame(answerRate = answerRates, answerNum = answerNums, unanswerNum = unanswerNums, x = 2004:2022)
+ggplot(answerRateYearDf, aes(x=x,y=answerRate)) + geom_col(color="#0000EE", fill="#8888EE") + labs(title = "家园网回答率按年分布 (2004-2022)")
+ggsave("figure/answer_RateYear.png")
+```
+
+
+```{r}
+### 已回复的消息
+
+getDelta = function(x, y) {
+  if (length(x) != 1) {
+    print(c(x, length(x)))
+  }
+  if (length(y) != 1) {
+    print(c(y, length(y)))
+  }
+  y1 = getYear(x); y2 = getYear(y);
+  m1 = getMonth(x); m2 = getMonth(y);
+  d1 = getDay(x); d2 = getDay(y);
+  h1 = getHour(x); h2 = getHour(y);
+  answer = h2 - h1;
+  if (d2 != d1) answer = answer + (d2-d1)*24;
+  if (m2 > m1) {
+    for (i in m1:m2){
+      t = c(31,28,31,30,31,30,31,31,30,31,30,31)[m1]*24;
+      if (t == 28 & h1 %% 4 == 0) {
+        t = t + 1;
+      }
+      answer = answer + t;
+    }
+      
+  }
+  else if (m2 < m1) answer = answer + 31*24
+  return (answer);
+}
+
+times = mydata_answered$time; answerTime = mydata_answered$answerTime
+print(c(length(times), length(answerTime)))
+
+mydata_answered$delta = mapply(getDelta, mydata_answered$time, y=mydata_answered$answerTime)
+mydata_answerWrong = subset(mydata_answered, delta<0)
+print(c(max(delta), min(delta)))
+
+ggplot(mydata_answered, aes(x=year)) + geom_histogram(binwidth = 1, color="#0000EE", fill="#8888EE") + labs(title = "2004-2022年家园网发帖数量")
+ggsave("figure/answered/years.png")
+
+ggplot(mydata_answered, aes(x=month)) + geom_histogram(binwidth = 1, color="#0000EE", fill="#8888EE") + labs(title = "1-12月家园网发帖数量 (2004-2022)")
+ggsave("figure/answered/months.png")
+
+ggplot(mydata_answered, aes(x=day)) + geom_histogram(binwidth = 1, color="#0000EE", fill="#8888EE") + labs(title = "月中家园网发帖数量 (2004-2022)")
+ggsave("figure/answered/days.png")
+
+ggplot(mydata_answered, aes(x=hour)) + geom_histogram(binwidth = 1, color="#0000EE", fill="#8888EE") + labs(title = "单日家园网发帖数量分布 (2004-2022)")
+ggsave("figure/answered/hour.png")
+
+```
+
+```{r}
+
+### 2011.09.30 词云
+
+library(jiebaR)
+library(jiebaRD)
+library(tidyverse)
+library(dplyr)
+library(wordcloud2)
+library(ggplot2)
+library(htmlwidgets) 
+
+mydata20110930 = subset(mydata1, dateID==2835)
+seg_line = worker(bylines = TRUE, stop_word = "stop_word.txt", user = "user_dict.txt")
+results_line = segment(mydata20110930$content,seg_line)
+seg_all = worker(stop_word = "stop_word.txt", user = "user_dict.txt")
+results_all = segment(mydata20110930$content,seg_all)
+freq_all = freq(results_all)
+freq_all = freq_all[order(freq_all$freq, decreasing = TRUE), ]
+freq_all$freq = sqrt(sqrt(freq_all$freq))
+# png("figures/20110930_wordcloud.png")
+hw = wordcloud2(freq_all[1:200,], shape = "diamond")
+saveWidget(hw,"1.html",selfcontained = F)
+webshot::webshot("1.html","1.png",vwidth = 1992, vheight = 1744, delay =10)
+# dev.off()
+
+```
+
+## Frequency
+
+```{r}
+answerBy = mydata$answerBy
+setAnswerBy = unique(answerBy)
+mydataqingfeng = subset(mydata, answerBy=="清风湛影超市")
+mydataTianmao = subset(mydata, answerBy=="天猫校园店")
+mydataReply = subset(mydata, replyCount > 0)
+ggplot(mydataReply, aes(x=dateID)) + geom_histogram(binwidth = 30, color="#0000EE", fill="#8888EE") + labs(title = "2012-2022 家园网同学回复条数分布")
+ggsave("figure/reply.png")
+t = as.data.frame(table(answerBy))
+t
+
+```
+
