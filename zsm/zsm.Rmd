@@ -1,0 +1,302 @@
+---
+title: "Project"
+output: html_document
+date: '2022-12-14'
+---
+
+# Read in file with sentimental score
+
+```{r}
+library(jiebaR)
+library(jiebaRD)
+library(tidyverse)
+library(dplyr)
+library(wordcloud2)
+library(ggplot2)
+library(readr)
+```
+
+```{r}
+da = read_csv("senti.csv")
+colnames(da)
+```
+
+# Explore sentimental score distribution
+
+```{r}
+ggplot(da, aes(x=senti)) + geom_histogram(binwidth = 0.05, color="#6E1DBC", fill="#D29CF0") + labs(title = "2004-2022年反馈信息积极-消极统计分布图") + theme_bw()
+ggsave("figure0/senti.png")
+```
+
+```{r}
+times = da$time
+getYear = function(x) {
+  if (x == "") {
+    return(-1);
+  }
+  as.integer(substr(x,1,4))
+}
+getMonth = function(x) {
+  as.integer(substr(x,6,7))
+}
+getDay = function(x) {
+  as.integer(substr(x,9,10))
+}
+getHour = function(x) {
+  if (x == "") {
+    return(-1);
+  }
+  as.integer(substr(x,12,13))
+}
+getDayIdByYear = function(x) {
+  mds = c(31,28,31,30,31,30,31,31,30,31,30,31)
+  month = getMonth(x); dateID = getDay(x);
+  if (month > 1) {
+    for (i in 1:(month-1)) {
+      dateID = dateID + mds[i]
+    }
+  }
+  return(dateID)
+}
+getDayId = function(x) {
+  mds = c(31,28,31,30,31,30,31,31,30,31,30,31)
+  year = getYear(x); month = getMonth(x); dateID = getDay(x);
+  if (month > 1) {
+    for (i in 1:(month-1)) {
+      dateID = dateID + mds[i]
+    }
+  }
+  dateID = dateID + (year - 2004) * 366
+  return(dateID)
+}
+
+da$year = sapply(times, getYear)
+da$month = sapply(times, getMonth)
+da$day = sapply(times, getDay)
+da$hour = sapply(times, getHour)
+da$dayID = sapply(times, getDayId)
+```
+
+```{r}
+agg_year = aggregate(da["senti"], by=list(da$year), FUN=mean)
+agg_month = aggregate(da["senti"], by=list(da$month), FUN=mean)
+agg_hour = aggregate(da["senti"], by=list(da$hour), FUN=mean)
+agg_year
+```
+
+```{r}
+ggplot(agg_year, aes(y=senti, x=Group.1)) + geom_point(color="#6E1DBC", size=2) + geom_line(color="#6E1DBC") + labs(x="Year", y="Average sentimental score", title = "年平均积极指数变化趋势图") + theme_bw()
+ggsave("figure0/senti_year.png")
+
+ggplot(agg_month, aes(y=senti, x=Group.1)) + geom_point(color="#6E1DBC", size=2) + geom_line(color="#6E1DBC") + labs(x="Month", y="Average sentimental score", title = "月平均积极指数变化趋势图") + theme_bw() + scale_x_continuous(breaks=c(0, 12, 6))
+ggsave("figure0/senti_month.png")
+
+ggplot(agg_hour, aes(y=senti, x=Group.1)) + geom_point(color="#6E1DBC", size=2) + geom_line(color="#6E1DBC") + labs(x="Hour", y="Average sentimental score", title = "每日平均积极指数变化趋势图") + theme_bw()
+ggsave("figure0/senti_hour.png")
+```
+
+```{r}
+da$ans = is.na(da$answer)
+da$yearID = da$year - 2004
+lf1 = glm(ans ~ senti + year, data=da, family="binomial")
+summary(lf1)
+```
+
+```{r}
+daAns = subset(da, !(is.na(answer)))
+daAns$anslen = sapply(daAns$answer, str_length)
+lf2 = lm(anslen ~ senti + year, data=daAns)
+summary(lf2)
+```
+
+```{r}
+ggplot(daAns, aes(y=anslen, x=senti)) + geom_point(color="#6E1DBC", size=0.5) + labs(x="Year", y="Average sentimental score", title = "2004-2022年反馈信息积极-消极统计分布图") + theme_bw() + scale_y_continuous(limits=c(0,200))
+ggsave("figure0/senti_anslen.png")
+```
+
+# Take a general view on supermarkets
+
+```{r}
+answerBy = da$answerBy
+setAnswerBy = unique(answerBy)
+setAnswerBy
+```
+
+```{r}
+daQingfeng = subset(da, answerBy=="清风湛影超市")
+daTianmao = subset(da, answerBy=="天猫校园店")
+print(c(dim(daQingfeng), dim(daTianmao)))
+```
+
+```{r}
+c(mean(daQingfeng$senti), mean(daTianmao$senti))
+```
+
+```{r}
+daQingfeng = subset(da, (answerBy=="清风湛影超市") | (str_detect(fulltext, "清风湛影")))
+daTianmao = subset(da, (answerBy=="天猫校园店") | (str_detect(fulltext, "天猫|猫超")))
+c(dim(daQingfeng), dim(daTianmao))
+```
+
+```{r}
+c(mean(daQingfeng$senti), mean(daTianmao$senti))
+```
+
+```{r}
+daQingfeng = subset(da, (answerBy=="清风湛影超市") | (str_detect(fulltext, "清风湛影")) 
+                    | (str_detect(fulltext, "超市") & (year < 2018)))
+daTianmao = subset(da, (answerBy=="天猫校园店") | (str_detect(fulltext, "天猫|猫超"))
+                   | (str_detect(fulltext, "超市") & (year > 2018)))
+c(dim(daQingfeng), dim(daTianmao))
+```
+
+```{r}
+c(mean(daQingfeng$senti), mean(daTianmao$senti))
+```
+
+```{r}
+daGanxie = subset(da, str_detect(fulltext, "感谢|致敬|赞|好评|很棒|好棒|表扬|负责|热情|有趣|难得"))
+dim(daGanxie)
+```
+
+```{r}
+daQingfeng0 = subset(daGanxie, (answerBy=="清风湛影超市") | (str_detect(fulltext, "清风湛影")) 
+                    | (str_detect(fulltext, "超市") & (year < 2018)))
+daTianmao0 = subset(daGanxie, (answerBy=="天猫校园店") | (str_detect(fulltext, "天猫|猫超"))
+                   | (str_detect(fulltext, "超市") & (year > 2018)))
+c(dim(daQingfeng0), dim(daTianmao0))
+```
+
+```{r}
+c(151/1955, 29/412)
+```
+
+```{r}
+library(webshot)
+library(htmlwidgets)
+#webshot::install_phantomjs()
+```
+
+```{r}
+seg_all = worker(stop_word = "stop_word.txt", user = "user_dict.txt")
+results_all = segment(daQingfeng$fulltext, seg_all)
+freq_all = freq(results_all)
+freq_all = freq_all[order(freq_all$freq, decreasing = TRUE), ]
+freq_all = freq_all[!(freq_all$char %in% c("超市", "同学", "学校", "学生")),]
+freq_all$freq = sqrt(sqrt(freq_all$freq))
+maxnum = 1000
+freq_all = freq_all[1:maxnum, ] # 只考虑前100个
+tmp_graph = wordcloud2(freq_all)
+saveWidget(tmp_graph, "tmp.html", selfcontained=F) #先保存为网页格式
+webshot("tmp.html", "figure0/Qingfeng.jpg", delay=3, vwidth=1200, vheight=1000)
+```
+
+```{r}
+seg_all = worker(stop_word = "stop_word.txt", user = "user_dict.txt")
+results_all = segment(daTianmao$fulltext, seg_all)
+freq_all = freq(results_all)
+freq_all = freq_all[order(freq_all$freq, decreasing = TRUE), ]
+freq_all = freq_all[!(freq_all$char %in% c("超市", "同学", "学校", "学生")),]
+freq_all$freq = sqrt(sqrt(freq_all$freq))
+maxnum = 300
+freq_all = freq_all[1:maxnum, ] # 只考虑前100个
+tmp_graph = wordcloud2(freq_all)
+saveWidget(tmp_graph, "tmp.html", selfcontained=F) #先保存为网页格式
+webshot("tmp.html", "figure0/Tianmao.jpg", delay=3, vwidth=1200, vheight=1000)
+```
+
+
+# Take a general view on canteens
+
+```{r}
+daZijing = subset(da, ((answerBy=="饮食服务中心") & str_detect(fulltext, "紫荆")) | (str_detect(fulltext, "紫荆园|紫荆[一二三四1234][层楼]")))
+daTaoli = subset(da, (str_detect(fulltext, "桃李")))
+daQingfen = subset(da, (str_detect(fulltext, "清芬")))
+daDingxiang = subset(da, (str_detect(fulltext, "丁香")))
+daWanren = subset(da, ((answerBy=="饮食服务中心") & str_detect(fulltext, "万人|观畴")) | (str_detect(fulltext, "万人食堂|观畴食堂|观畴园")))
+daTingtao = subset(da, (str_detect(fulltext, "听涛")))
+daYushu = subset(da, (str_detect(fulltext, "玉树")))
+daZhilan = subset(da, (str_detect(fulltext, "芝兰")))
+c(dim(daZijing), dim(daTaoli), dim(daQingfen), dim(daDingxiang), dim(daWanren), dim(daTingtao), dim(daYushu), dim(daZhilan))
+# 紫荆, 桃李, 清芬, 丁香, 万人, 听涛, 玉树, 芝兰
+```
+
+```{r}
+c(mean(daZijing$senti), mean(daTaoli$senti), mean(daQingfen$senti), mean(daDingxiang$senti), mean(daWanren$senti), mean(daTingtao$senti), mean(daYushu$senti), mean(daZhilan$senti))
+# 紫荆, 桃李, 清芬, 丁香, 万人, 听涛, 玉树, 芝兰
+```
+
+```{r}
+# 感谢各个食堂的
+daZijing0 = subset(daGanxie, ((answerBy=="饮食服务中心") & str_detect(fulltext, "紫荆")) | (str_detect(fulltext, "紫荆园|紫荆[一二三四1234][层楼]")))
+daTaoli0 = subset(daGanxie, (str_detect(fulltext, "桃李")))
+daQingfen0 = subset(daGanxie, (str_detect(fulltext, "清芬")))
+daDingxiang0 = subset(daGanxie, (str_detect(fulltext, "丁香")))
+daWanren0 = subset(daGanxie, ((answerBy=="饮食服务中心") & str_detect(fulltext, "万人|观畴")) | (str_detect(fulltext, "万人食堂|观畴食堂|观畴园")))
+daTingtao0 = subset(daGanxie, (str_detect(fulltext, "听涛")))
+daYushu0 = subset(daGanxie, (str_detect(fulltext, "玉树")))
+daZhilan0 = subset(daGanxie, (str_detect(fulltext, "芝兰")))
+c(dim(daZijing0), dim(daTaoli0), dim(daQingfen0), dim(daDingxiang0), dim(daWanren0), dim(daTingtao0), dim(daYushu0), dim(daZhilan0))
+# 紫荆, 桃李, 清芬, 丁香, 万人, 听涛, 玉树, 芝兰
+```
+
+```{r}
+# 各食堂感谢比例
+c(dim(daZijing0)[1]/dim(daZijing)[1], dim(daTaoli0)[1]/dim(daTaoli)[1], dim(daQingfen0)[1]/dim(daQingfen)[1], dim(daDingxiang0)[1]/dim(daDingxiang)[1], dim(daWanren0)[1]/dim(daWanren)[1], dim(daTingtao0)[1]/dim(daTingtao)[1], dim(daYushu0)[1]/dim(daYushu)[1], dim(daZhilan0)[1]/dim(daZhilan)[1])
+# 紫荆, 桃李, 清芬, 丁香, 万人, 听涛, 玉树, 芝兰
+```
+
+```{r}
+# 紫荆园词云
+seg_all = worker(stop_word = "stop_word.txt", user = "user_dict.txt")
+results_all = segment(daZijing$fulltext, seg_all)
+freq_all = freq(results_all)
+freq_all = freq_all[order(freq_all$freq, decreasing = TRUE), ]
+freq_all = freq_all[!(freq_all$char %in% c("清芬", "同学", "学校", "学生", "食堂", "紫荆", "桃李", "说", "餐厅")),]
+freq_all$freq = sqrt(sqrt(freq_all$freq))
+maxnum = 50
+freq_all = freq_all[1:maxnum, ] # 只考虑前100个
+tmp_graph = wordcloud2(freq_all)
+saveWidget(tmp_graph, "tmp.html", selfcontained=F) #先保存为网页格式
+webshot("tmp.html", "figure0/Zijing.jpg", delay=10, vwidth=1500, vheight=1200)
+```
+
+```{r}
+# 桃李园词云
+seg_all = worker(stop_word = "stop_word.txt", user = "user_dict.txt")
+results_all = segment(daTaoli$fulltext, seg_all)
+freq_all = freq(results_all)
+freq_all = freq_all[order(freq_all$freq, decreasing = TRUE), ]
+freq_all = freq_all[!(freq_all$char %in% c("清芬", "同学", "学校", "学生", "食堂", "紫荆", "桃李", "说", "餐厅")),]
+freq_all$freq = sqrt(sqrt(freq_all$freq))
+maxnum = 50
+freq_all = freq_all[1:maxnum, ] # 只考虑前100个
+tmp_graph = wordcloud2(freq_all)
+saveWidget(tmp_graph, "tmp.html", selfcontained=F) #先保存为网页格式
+webshot("tmp.html", "figure0/Taoli.jpg", delay=10, vwidth=1500, vheight=1200)
+```
+
+```{r}
+# 清芬园词云
+seg_all = worker(stop_word = "stop_word.txt", user = "user_dict.txt")
+results_all = segment(daQingfen$fulltext, seg_all)
+freq_all = freq(results_all)
+freq_all = freq_all[order(freq_all$freq, decreasing = TRUE), ]
+freq_all = freq_all[!(freq_all$char %in% c("清芬", "同学", "学校", "学生", "食堂", "紫荆", "桃李", "说", "餐厅")),]
+freq_all$freq = sqrt(sqrt(freq_all$freq))
+maxnum = 50
+freq_all = freq_all[1:maxnum, ] # 只考虑前100个
+tmp_graph = wordcloud2(freq_all)
+saveWidget(tmp_graph, "tmp.html", selfcontained=F) #先保存为网页格式
+webshot("tmp.html", "figure0/Qingfen.jpg", delay=10, vwidth=1500, vheight=1200)
+```
+
+
+
+
+
+
+
+
+
+

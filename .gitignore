@@ -41,3 +41,6 @@ vignettes/*.pdf
 
 # raw data
 /preprocess-data/data/*.html
+
+# PyCharm project settings
+.idea/
