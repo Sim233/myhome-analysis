@@ -2,7 +2,7 @@ library(rvest)
 library(xml2)
 
 files = list.files("data", full.names = T)
-titles = c(); times = c(); ipaddrs = c(); contents = c(); 
+fs = c(); titles = c(); times = c(); ipaddrs = c(); contents = c(); 
 answers = c(); answerBys = c(); answerTimes = c(); replyCounts = c(); replyContents = c()
 
 getId = function(x) {
@@ -53,13 +53,13 @@ for (i in 1:length(files)) {
     }
     titles = c(titles, title); times = c(times, time); ipaddrs = c(ipaddrs, ipaddr); contents = c(contents, content); 
     answers = c(answers, answer); answerBys = c(answerBys, answerBy); answerTimes = c(answerTimes, answerTime); 
-    replyCounts = c(replyCounts, replyCount); replyContents = c(replyContents, replyContent)
+    replyCounts = c(replyCounts, replyCount); replyContents = c(replyContents, replyContent); fs = c(fs, f)
 
 
 }
 
 df = data.frame(
-    filePath = files,
+    filePath = fs,
     title = titles,
     time = times,
     ipaddr = ipaddrs,
