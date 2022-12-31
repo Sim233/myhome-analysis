@@ -110,7 +110,7 @@ summary(lf2)
 ```
 
 ```{r}
-ggplot(daAns, aes(y=anslen, x=senti)) + geom_point(color="#6E1DBC", size=0.5) + labs(x="Year", y="Average sentimental score", title = "2004-2022年反馈信息积极-消极统计分布图") + theme_bw() + scale_y_continuous(limits=c(0,200))
+ggplot(daAns, aes(y=anslen, x=senti)) + geom_point(color="#6E1DBC", size=0.5) + labs(x="Sentimental score", y="Answer length", title = "2004-2022年反馈信息积极-消极统计分布图") + theme_bw() + scale_y_continuous(limits=c(0,200))
 ggsave("figure0/senti_anslen.png")
 ```
 
@@ -205,7 +205,6 @@ saveWidget(tmp_graph, "tmp.html", selfcontained=F) #先保存为网页格式
 webshot("tmp.html", "figure0/Tianmao.jpg", delay=3, vwidth=1200, vheight=1000)
 ```
 
-
 # Take a general view on canteens
 
 ```{r}
@@ -290,13 +289,3 @@ tmp_graph = wordcloud2(freq_all)
 saveWidget(tmp_graph, "tmp.html", selfcontained=F) #先保存为网页格式
 webshot("tmp.html", "figure0/Qingfen.jpg", delay=10, vwidth=1500, vheight=1200)
 ```
-
-
-
-
-
-
-
-
-
-
