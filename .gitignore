@@ -44,3 +44,7 @@ vignettes/*.pdf
 
 # PyCharm project settings
 .idea/
+
+# HTML files
+*.html
+*_files/
