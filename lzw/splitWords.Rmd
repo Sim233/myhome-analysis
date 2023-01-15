@@ -1,0 +1,52 @@
+---
+title: "Project "
+output: html_document
+date: '2022-12-14'
+---
+## Initialization
+
+```{r}
+library(jiebaR)
+library(jiebaRD)
+library(tidyverse)
+library(dplyr)
+library(wordcloud2)
+```
+
+## Segmentation
+
+```{r}
+data = read.csv("jiayuan.csv")
+seg_line = worker(type = "query", bylines = TRUE, stop_word = "stop_word.txt", user = "user_dict.txt")
+results_line = segment(data$content,seg_line)
+seg_all = worker(type = "query", stop_word = "stop_word.txt", user = "user_dict.txt")
+results_all = segment(data$content,seg_all)
+```
+
+
+## Frequency
+
+```{r}
+freq_all = freq(results_all)
+freq_all = freq_all[order(freq_all$freq, decreasing = TRUE), ]
+wordcloud2(freq_all[1:1000,])
+```
+
+```{r}
+dict = readLines("user_dict.txt")
+freq_all[freq_all$char %in% dict,]
+```
+
+```{r}
+## Taking only nouns of Dutch data
+x <- subset(brussels_reviews_anno, language == "nl")
+x <- subset(x, xpos %in% c("NN", "NNP", "NNS"))
+x <- x[, c("doc_id", "lemma")]
+```
+
+## Catagorizaition
+
+### Keywords
+
+### K-NN
+

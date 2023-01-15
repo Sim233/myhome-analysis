@@ -1,0 +1,326 @@
+---
+title: "main"
+output: html_document
+date: '2022-12-16'
+---
+
+```{r}
+library(jiebaR)
+library(jiebaRD)
+library(tidyverse)
+library(dplyr)
+library(wordcloud2)
+library(doc2vec)
+library(word2vec)
+library(uwot)
+library(dbscan)
+library(pacman)
+library(plyr)
+library(bbl)
+p_load(tidyverse,tidytext,data.table,rio,jiebaR)
+```
+
+```{r}
+data = read.csv("jiayuan.csv")
+seg_line = worker(type = "query", bylines = TRUE, stop_word = "stop_word.txt", user = "user_dict.txt")
+data$all_content = paste(data$title, data$content, data$replyContent)
+results_line = segment(data$all_content,seg_line)
+data$results = results_line
+data$results = lapply(results_line, function(x) if(identical(x, character(0))) NA else x)
+data = drop_na(data)
+```
+
+```{r}
+tagger = worker(type = "tag")
+for (i in 1:length(data)){
+  res = vector_tag(data$results[i][[1]], tagger)
+  index = names(res) %in% c("n","nr","nr1","nr2","nrj","nrf","ns","nsf","nt","nz","nl","ng","vn","vg","v","vd")
+  data$results[i][[1]] = data$results[i][[1]][index]
+}
+```
+
+```{r}
+#synonyms replacement
+dt  = read.table("synonyms.txt", sep = " ", header = T, comment.char = "",stringsAsFactors= F)
+dt$Synonyms <- paste("\\b",gsub(",","\\\\b|\\\\b",dt$Synonyms),"\\b", sep = "")
+data$results <- sapply(data$results, function(x){
+  for(row in 1:nrow(dt)){
+    x = gsub(dt$Synonyms[row],dt$Word[row], x)
+  }
+  list(x)
+})
+```
+
+
+## doc2vec & BTM
+
+```{r}
+result = data.frame(doc_id = data$filePath[1], lemma = paste(results_line[[1]], collapse = " "))
+for(i in 2:length((results_line))){
+  result = rbind(result, data.frame(doc_id = data$filePath[i], lemma = paste(results_line[[i]], collapse = " ")))
+  if (i%%10000 == 0)
+    print(i);
+}
+result
+```
+
+```{r}
+results_line = lapply(results_line, function(x) if(identical(x, character(0))) NA else x) # covert character(0) to NULL
+results_line <- results_line[!sapply(results_line,is.null)] # Filter NULL
+df = data.frame(doc_id = data$filePath[1], lemma = results_line[[1]])
+for(i in 2:1000)
+  df = rbind(df, data.frame(doc_id = data$filePath[i], lemma = results_line[[i]]))
+df
+```
+
+```{r}
+data(data, package = "doc2vec")
+x      <- data.frame(doc_id = result$doc_id,
+                     text   = result$content,
+                     stringsAsFactors = FALSE)
+x[1:1000,]
+```
+
+```{r}
+# x$text <- txt_clean_word2vec(x$text)
+# x      <- subset(x, txt_count_words(text) < 1000)
+
+d2v    <- paragraph2vec(x[1:10000,], type = "PV-DBOW", dim = 50, 
+                        lr = 0.05, iter = 10,
+                        window = 15, hs = TRUE, negative = 0,
+                        sample = 0.00001, min_count = 5, 
+                        threads = 1)
+model  <- top2vec(d2v, 
+                  control.dbscan = list(minPts = 50), 
+                  control.umap = list(n_neighbors = 15L, n_components = 3), umap = tumap, 
+                  trace = TRUE)
+info   <- summary(model, top_n = 100)
+info$topwords
+```
+
+```{r}
+library(udpipe)
+library(BTM)
+data("brussels_reviews_anno", package = "udpipe")
+
+
+## Taking only nouns of Dutch data
+x <- subset(brussels_reviews_anno, language == "nl")
+x <- subset(x, xpos %in% c("NN", "NNP", "NNS"))
+x <- x[, c("doc_id", "lemma")]
+x 
+```
+
+```{r}
+## Building the model
+set.seed(321)
+model  <- BTM(df, k = 6, beta = 0.01, iter = 1000, trace = 100)
+
+## Inspect the model - topic frequency + conditional term probabilities
+model$theta
+
+topicterms <- terms(model, top_n = 100)
+topicterms
+```
+
+```{r}
+library(showtext)
+showtext_auto(enable = TRUE)
+font_add('Songti', 'Songti.ttc')
+font_families()
+library(textplot)
+library(ggraph)
+library(concaveman)
+plot(model,family ='Songti')
+```
+
+
+## KNN Model
+
+### Creat word_list
+```{r}
+data_filtered = data
+rmvMul = function(x){
+  tbl = table(x)
+  nms = names(tbl)
+  val = pmin(3,as.numeric(tbl))
+  df_temp = data.frame(dat = nms, freq = val)
+  df_temp = freq2raw(data = df_temp[,1:2], freq = df_temp$freq)
+  return(df_temp$dat)
+}
+data_filtered$results = sapply(data_filtered[,"results"], rmvMul)
+```
+
+```{r}
+data_filtered = data_filtered[sapply(data_filtered[,"results"],length) >= 15,]
+data_filtered = data_filtered[sapply(unique(data_filtered[,"results"]),length) >= 10,]
+```
+
+```{r}
+corpus = data_filtered[c("filePath","results")]
+colnames(corpus) = c("id","words")
+corpus %>% unnest() %>% count(id,words) -> f_table
+f_table
+f_table %>% bind_tf_idf(term = words,document = id,n = n) -> tf_idf_table
+tf_idf_table
+```
+
+```{r}
+tf_idf_table %>% group_by(id) %>% top_n(3,tf_idf) %>% ungroup() -> top_tf_idf
+word_list_tf_idf = unique(list(tf_idf_table[tf_idf_table$tf_idf >= 1.2,]$words)[[1]])
+tf_idf_table %>% top_n(10,tf_idf)
+```
+
+```{r}
+word_list_prior = list(readLines("word_list.txt"))[[1]]
+word_list_prior
+word_list_tf_idf = word_list_tf_idf[!(word_list_tf_idf %in% word_list_prior)]
+word_list_tf_idf
+```
+
+### Create document vector
+
+#### Create tf-idf
+```{r}
+tdm = data.frame(id = data_filtered$filePath)
+tdm[word_list_tf_idf] = as.integer(word_list_tf_idf %in% data_filtered$results[1][[1]])
+for (i in 2:length(tdm)){
+  if (i %% 1000 == 0) print(i);
+  tdm[i,] = c(tdm[i,]$id, as.integer(word_list_tf_idf %in% data_filtered$results[i][[1]]))
+  temp = tf_idf_table[(tf_idf_table$id == tdm[i,]$id) & (tf_idf_table$words %in% word_list_tf_idf) ,c("words","tf_idf")]
+  tdm[i,] == 0
+  # if (length(temp) != 0){
+  #   for (word in word_list_tf_idf){
+  #     tf_idf_value = temp[temp$words == word,"tf_idf"][[1]]
+  #     if (length(tf_idf_value) == 0) {tdm[i,word] = 0;}
+  #     else tdm[i,word] = temp[temp$words == word,"tf_idf"][[1]]
+  #   }
+  # }
+}
+```
+
+#### Create personal
+```{r}
+tdm = data.frame(id = data_filtered$filePath)
+tdm[word_list_prior] = as.integer(word_list_prior %in% data_filtered$results[1][[1]])
+for (i in 2:length(tdm)){
+  if (i %% 1000 == 0) print(i);
+  tdm[i,] = c(tdm[i,]$id, as.integer(word_list_prior %in% data_filtered$results[i][[1]]))
+}
+```
+
+```{r}
+word_list_prior = unique(list(readLines("word_list.txt"))[[1]])
+tdm = data.frame(id = data_filtered$filePath)
+tdm[word_list_prior] = as.integer(word_list_prior %in% data_filtered$results[1][[1]])
+matrix_gen = function(x){
+  #print(data_filtered[data_filtered$filePath == x[1],]$results[[1]])
+  result = as.integer(word_list_prior %in% data_filtered[data_filtered$filePath == x[1],]$results[[1]])
+  #print(result)
+  return(result)
+}
+tdm[,word_list_prior] = t(apply(tdm, 1, matrix_gen))
+```
+
+```{r}
+tdm
+```
+
+
+## Training Set
+```{r}
+data_type = data_known[,c("filePath", "type")]
+colnames(data_type) = c("id", "category")
+tdm = tdm[1:494]
+tdm = left_join(tdm, data_type, by = "id")
+known_set = drop_na(tdm)
+```
+
+```{r}
+sum(known_set$category == NA)
+```
+
+```{r}
+# 分层抽样
+library(sampling)
+set.seed(123)
+tmp1 <- sample(rownames(subset(known_set, category == "1")),round(nrow(known_set[known_set$category == "1",])*0.3))
+tmp2 <- sample(rownames(subset(known_set, category == "2")),round(nrow(known_set[known_set$category == "2",])*0.3))
+tmp3 <- sample(rownames(subset(known_set, category == "3")),round(nrow(known_set[known_set$category == "3",])*0.3))
+tmp4 <- sample(rownames(subset(known_set, category == "4")),round(nrow(known_set[known_set$category == "4",])*0.3))
+tmp5 <- sample(rownames(subset(known_set, category == "5")),round(nrow(known_set[known_set$category == "5",])*0.3))
+tmp6 <- sample(rownames(subset(known_set, category == "6")),round(nrow(known_set[known_set$category == "6",])*0.3))
+tmp7 <- sample(rownames(subset(known_set, category == "7")),round(nrow(known_set[known_set$category == "7",])*0.3))
+train_id <- c(tmp1,tmp2,tmp3,tmp4,tmp5,tmp6,tmp7)
+train_data <- known_set[train_id,]
+test_data <- known_set[!(known_set$id %in% train_data$id),]
+```
+
+```{r}
+prop.table(table(train_data$category))
+prop.table(table(test_data$category))
+```
+
+### KNN
+```{r}
+library(caret)
+control <- trainControl(method = 'cv',number = 2, verboseIter = TRUE)
+# knn模型训练
+model <- train(category~.,train_data, method = 'knn', preProcess = c('center','scale'), trControl = control, tuneLength = 2)
+```
+
+```{r}
+getmode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+# KNN Regression function
+knn <- function(train.data, train.label, test.data, K=100, distance = 'euclidean'){
+    ## count number of train samples
+    train.len <- nrow(train.data)
+   
+    ## count number of test samples
+    test.len <- nrow(test.data)
+     
+    ## New List for hold the test label (the length is the same with the length of test data)
+    test.label <- rep(0,test.len)
+    
+    ## calculate distances between samples
+    dist <- as.matrix(dist(rbind(test.data, train.data), method= distance))[1:test.len, (test.len+1):(test.len+train.len)]
+   
+    ## for each test sample
+    for (i in 1:test.len){
+        if (i%%100 == 0) print(i);
+        ### find its K nearest neighbours from training sampels...
+        nn <- as.data.frame(sort(dist[i,], index.return = TRUE))[1:K,2]
+
+        ### and calculate the predicted labels according to the average of the neighbors’ values
+        test.label[i]<-getmode(train.label[nn])
+    }
+   
+    ## return the predict values
+    return (test.label)
+}
+```
+
+```{r}
+k_test = c(3,5,10,50,100,200)
+accuracy = list()
+cat_results = list()
+for (k in k_test){
+  res = knn(as.matrix(train_data[,2:494]), as.matrix(train_data[,495]), as.matrix(test_data[,2:494]), k)
+  cat_results = append(cat_results,list(res))
+  accuracy = append(accuracy,sum(test_data[,495] == res)/length(test_data))
+}
+```
+
+```{r}
+plot(k_test, accuracy,log= "x",xlab = "k", main = "accuracy under differernt Ks")
+lines(k_test, accuracy, type = "l", lty = 1)
+```
+
+```{r}
+unknown_set = tdm[is.na(tdm$category),]
+res = knn(as.matrix(known_set[,2:494]), as.matrix(known_set[,495]), as.matrix(unknown_set[,2:494]), k)
+```

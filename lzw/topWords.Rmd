@@ -1,0 +1,130 @@
+---
+title: "top_words"
+output: html_document
+date: '2022-12-20'
+---
+
+```{r}
+library(jiebaR)
+library(jiebaRD)
+library(tidyverse)
+library(dplyr)
+library(wordcloud2)
+library(doc2vec)
+library(word2vec)
+library(uwot)
+library(dbscan)
+library(pacman)
+library(plyr)
+p_load(tidyverse,tidytext,data.table,rio,jiebaR)
+```
+
+## Load data
+
+```{r}
+data_known = data_filtered[data_filtered$answerBy != "",]
+unique(data_filtered$answerBy)
+```
+
+## Catagories
+
+```{r}
+# 宿舍
+dorm_ans = c("学生公寓区事务科", "国际学生公寓区事务科", "高培", "网络中心")
+corpus_dorm = data_known[(data_known$answerBy %in% dorm_ans),c("filePath","results")]
+colnames(corpus_dorm) = c("id","words")
+freq(unlist(corpus_dorm$words)) %>% top_n(100,freq) %>% arrange(freq, decreasing = TRUE) -> freq_dorm
+wordcloud2(freq_dorm, shape = "circle")
+fwrite(list(freq_dorm$char), file = "dorm_list.txt")
+```
+
+```{r}
+# 食堂
+dining_ans = c("饮食服务中心")
+corpus_dining = data_known[(data_known$answerBy %in% dining_ans),c("filePath","results")]
+colnames(corpus_dining) = c("id","words")
+freq(unlist(corpus_dining$words)) %>% top_n(100,freq) %>% arrange(freq, decreasing = TRUE) -> freq_dining
+wordcloud2(freq_dining)
+fwrite(list(freq_dining$char), file = "dining_list.txt")
+```
+```{r}
+# 财务
+finance_ans = c("计算中心", "财务处")
+corpus_finance = data_known[(data_known$answerBy %in% finance_ans),c("filePath","results")]
+colnames(corpus_finance) = c("id","words")
+freq(unlist(corpus_finance$words)) %>% top_n(100,freq) %>% arrange(freq, decreasing = TRUE) -> freq_finance
+wordcloud2(freq_finance)
+fwrite(list(freq_finance$char), file = "finance_list.txt")
+```
+
+```{r}
+# 超市
+supermarket_ans = c("正大商贸公司", "清风湛影超市", "天猫校园店")
+corpus_supermarket = data_known[(data_known$answerBy %in% supermarket_ans),c("filePath","results")]
+colnames(corpus_supermarket) = c("id","words")
+freq(unlist(corpus_supermarket$words)) %>% top_n(100,freq) %>% arrange(freq, decreasing = TRUE) -> freq_supermarket
+wordcloud2(freq_supermarket)
+fwrite(list(freq_supermarket$char), file = "supermarket_list.txt")
+```
+
+
+
+```{r}
+# 教学楼
+classroom_ans = c("教学办公区事务科")
+corpus_classroom = data_known[(data_known$answerBy %in% classroom_ans),c("filePath","results")]
+colnames(corpus_classroom) = c("id","words")
+freq(unlist(corpus_classroom$words)) %>% top_n(100,freq) %>% arrange(freq, decreasing = TRUE) -> freq_classroom
+wordcloud2(freq_classroom)
+fwrite(list(freq_classroom$char), file = "classroom_list.txt")
+```
+
+
+```{r}
+# 其他
+others_ans = c("综合治理办公室", "保卫处", "接待中心", "基建处", "保卫处", "研工部", "学生处", "研工部", "体育部")
+corpus_others = data_known[(data_known$answerBy %in% others_ans),c("filePath","results")]
+colnames(corpus_others) = c("id","words")
+freq(unlist(corpus_others$words)) %>% top_n(100,freq) %>% arrange(freq, decreasing = TRUE) -> freq_others
+wordcloud2(freq_others)
+fwrite(list(freq_others$char), file = "others_list.txt")
+```
+
+
+```{r}
+# 其他
+others_ans = c("综合治理办公室", "保卫处", "接待中心", "基建处", "保卫处", "研工部", "学生处", "研工部", "体育部")
+corpus_others = data_known[(data_known$answerBy %in% others_ans),c("filePath","results")]
+colnames(corpus_others) = c("id","words")
+freq(unlist(corpus_others$words)) %>% top_n(100,freq) %>% arrange(freq, decreasing = TRUE) -> freq_others
+wordcloud2(freq_others)
+fwrite(list(freq_others$char), file = "others_list.txt")
+```
+
+## Tags
+```{r}
+data_known["type"] = 0 
+data_known[(data_known$answerBy %in% dorm_ans),"type"] = "1"
+data_known[(data_known$answerBy %in% dining_ans),"type"] = "2"
+data_known[(data_known$answerBy %in% finance_ans),"type"] = "3"
+data_known[(data_known$answerBy %in% supermarket_ans),"type"] = "4"
+data_known[(data_known$answerBy %in% classroom_ans),"type"] = "5"
+data_known[(data_known$answerBy %in% others_ans),"type"] = "6"
+data_known = data_known[data_known$type!= 0,]
+data_known$type = as.factor(data_known$type)
+```
+
+```{r}
+temp = data_known[,c("filePath", "type")]
+df = dplyr::count(temp, type)
+p <- ggplot(data = df, mapping = aes(x = 'Content', y = n, fill = type)) + geom_bar(stat = 'identity', position = 'stack', width = 1)
+label_value <- paste('(', round(df$n/sum(df$n) * 100, 1), '%)', sep = '')
+label <- paste(c("dorm","dining","finance","supermaket","classroom", "others"), label_value, sep = '')
+p + coord_polar(theta = 'y') + labs(x = '', y = '', title = '') + theme(axis.text = element_blank()) + theme(axis.ticks = element_blank()) + scale_fill_discrete(labels = label)
+```
+
+
+```{r}
+data_filtered[data_filtered$answerBy != "",]
+data_known
+```

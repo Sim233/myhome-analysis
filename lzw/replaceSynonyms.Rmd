@@ -1,0 +1,59 @@
+---
+title: "replaceSynonyms"
+output: html_document
+date: '2022-12-17'
+---
+
+```{r}
+dt  = read.table("synonyms.txt", sep = " ", header = T, comment.char = "",stringsAsFactors= F)
+mydf = read.table(header = TRUE, , stringsAsFactors= F,
+                    text ="sentence
+    'woxihuanzijing1'
+    'yexihuan南区1'
+    ")
+dt$Synonyms <- paste("\\b",gsub(",","\\\\b|\\\\b",dt$Synonyms),"\\b", sep = "")
+dt
+```
+
+```{r}
+
+mydf$sentence <- sapply(mydf$sentence, function(x){
+  for(row in 1:nrow(dt)){
+    x = gsub(dt$Synonyms[row],dt$Word[row], x)
+  }
+  x
+})
+mydf
+```
+
+
+
+```{r}
+dt$Synonyms <- paste("\\b",gsub(", ","\\\\b|\\\\b",dt$Synonyms),"\\b", sep = "")
+
+# Loop through each row of 'dt' to replace Synonyms with word using sapply
+mydf$sentence <- sapply(mydf$sentence, function(x){
+  for(row in 1:nrow(dt)){
+    x = gsub(dt$Synonyms[row],dt$Word[row], x)
+  }
+  x
+})
+
+mydf
+#                  sentence
+```
+
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

@@ -1,0 +1,20 @@
+---
+title: "dict_gen"
+output: html_document
+date: '2022-12-14'
+---
+
+```{r}
+library(arabic2kansuji)
+dict = readLines("test.txt")
+ans = dict
+for (x in 2:40) {
+  text = gsub("1",as.character(x),dict)
+  text = gsub("一",arabic2kansuji_num(x),text)
+  ans = append(ans, text)
+}
+sink("synonyms.txt")
+writeLines(unlist(lapply(ans, paste, collapse=" ")))
+sink()
+
+```
